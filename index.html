@@ -6,9 +6,10 @@
   <meta name="description" content="浏览 411 个 Blender 动物、生物与幻想角色模型。支持搜索、标签筛选、绑定信息查看和 metadata 导出。">
   <meta name="referrer" content="no-referrer">
   <title>动物生物图鉴 · 411 个 Blender 模型</title>
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261118-1">
   <script src="catalog.js" defer></script>
-  <script src="app.js" defer></script>
+  <script src="downloads.js" defer></script>
+  <script src="app.js?v=20261118-1" defer></script>
 </head>
 <body>
   <header class="topbar">
@@ -16,6 +17,7 @@
     <div class="top-actions"><a class="source-link" href="https://www.wankucg.com/category/动物生物模型/blender动物生物" target="_blank" rel="noopener noreferrer">玩酷CG 原站 ↗</a><button id="share-button" class="quiet-button" type="button">复制分享链接 <span aria-hidden="true">↗</span></button></div>
   </header>
   <main>
+    <nav class="collection-nav" aria-label="资源目录"><a href="./" aria-current="page">全部模型 <span id="nav-all-count">411</span></a><a href="downloaded/">已下载 <span id="nav-downloaded-count">—</span></a></nav>
     <section class="intro">
       <div><p class="eyebrow"><span class="orange-dot"></span> BLENDER COLLECTION / 01</p><h1>动物与幻想生物<span class="title-period">.</span></h1><p class="intro-copy">从真实动物到奇幻生物，探索模型的形态、细节与绑定信息。</p></div>
       <div class="collection-stat"><span id="total-count">411</span><div>个模型资源<span id="collection-date">2026.11.17 更新</span></div></div>
@@ -40,7 +42,7 @@
   <footer><span>ASSET ATLAS <span class="footer-divider">/</span> BLENDER ANIMALS</span><span>预览与信息来自玩酷CG · 模型下载请访问原站</span></footer>
   <dialog id="detail-dialog" aria-labelledby="detail-title">
     <div class="dialog-top"><span id="detail-id"></span><button id="close-detail" type="button" aria-label="关闭模型详情">关闭 <span aria-hidden="true">×</span></button></div>
-    <div class="detail-layout"><div class="detail-visual"><div class="detail-image-wrap"><img id="detail-image" alt=""><div id="image-error" hidden>此图暂不可用，可前往原站查看完整预览。</div></div><div class="image-controls"><button id="previous-image" type="button" aria-label="上一张预览">←</button><span id="image-count"></span><button id="next-image" type="button" aria-label="下一张预览">→</button><a id="open-image" target="_blank" rel="noopener noreferrer">查看原图 ↗</a></div></div><div class="detail-info"><p class="eyebrow">BLENDER / ANIMAL & CREATURE</p><h2 id="detail-title"></h2><div id="detail-tags" class="detail-tags"></div><dl id="detail-fields"></dl><div id="description-section"><h3>资源介绍</h3><p id="detail-description"></p></div><div class="detail-actions"><a id="detail-source" class="primary-button" target="_blank" rel="noopener noreferrer">前往原站查看模型 ↗</a><button id="export-item" type="button">导出本项 metadata ↓</button></div></div></div>
+    <div class="detail-layout"><div class="detail-visual"><div class="detail-image-wrap"><img id="detail-image" alt=""><div id="image-error" hidden>此图暂不可用，可前往原站查看完整预览。</div></div><div class="image-controls"><button id="previous-image" type="button" aria-label="上一张预览">←</button><span id="image-count"></span><button id="next-image" type="button" aria-label="下一张预览">→</button><a id="open-image" target="_blank" rel="noopener noreferrer">查看原图 ↗</a></div></div><div class="detail-info"><p class="eyebrow">BLENDER / ANIMAL & CREATURE</p><h2 id="detail-title"></h2><div id="detail-tags" class="detail-tags"></div><div id="detail-download" class="detail-download" hidden></div><dl id="detail-fields"></dl><div id="description-section"><h3>资源介绍</h3><p id="detail-description"></p></div><div class="detail-actions"><a id="detail-source" class="primary-button" target="_blank" rel="noopener noreferrer">前往原站查看模型 ↗</a><button id="export-item" type="button">导出本项 metadata ↓</button></div></div></div>
   </dialog>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <noscript><p>请启用 JavaScript 以浏览和筛选模型目录。</p></noscript>

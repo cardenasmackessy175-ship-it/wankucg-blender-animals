@@ -1,12 +1,21 @@
 (() => {
   'use strict';
   const catalog = window.MODEL_CATALOG;
+  const downloadedView = document.body.dataset.view === 'downloaded';
+  const downloads = window.DOWNLOADED_MODELS;
   const $ = id => document.getElementById(id);
   if (!catalog?.items?.length) {
     $('result-count').textContent = '目录暂时无法加载，请刷新页面重试。';
     return;
   }
-  const items = catalog.items;
+  if (downloadedView && !Array.isArray(downloads?.items)) {
+    $('result-count').textContent = '下载记录暂时无法加载，请刷新页面重试。';
+    return;
+  }
+  const downloadById = new Map((downloads?.items || []).map(record => [record.id, record]));
+  const allItems = catalog.items.map(item => ({...item, ...(downloadById.has(item.id) ? {download: downloadById.get(item.id)} : {})}));
+  const savedItems = allItems.filter(item => item.download);
+  const items = downloadedView ? savedItems : allItems;
   const byId = new Map(items.map(item => [item.id, item]));
   const pageSize = 32;
   const rigLabels = {controller: '带控制器', rigged: '已绑定', none: '未绑定', unknown: '未标注绑定'};
@@ -16,9 +25,14 @@
     catch { return ''; }
   };
   const shortTitle = item => item.display_title.replace(/(?:Blender|Blend)模型$/i, '').trim();
+  const formatBytes = bytes => bytes >= 1e9 ? `${(bytes / 1e9).toFixed(2)} GB` : `${(bytes / 1e6).toFixed(2)} MB`;
+  const formatDate = date => date.replaceAll('-', '.');
+  const batchDates = [...new Set(savedItems.map(item => item.download.batch_date))].sort().reverse();
+  const defaultSort = downloadedView ? 'downloaded' : 'newest';
   const params = new URLSearchParams(location.search);
-  const state = {q: (params.get('q') || '').slice(0, 180), tag: params.get('tag') || '', renderer: params.get('renderer') || '', rig: params.get('rig') || '', sort: params.get('sort') || 'newest', page: Math.max(1, Number(params.get('page')) || 1)};
-  if (!['newest', 'oldest', 'title'].includes(state.sort)) state.sort = 'newest';
+  const state = {q: (params.get('q') || '').slice(0, 180), tag: params.get('tag') || '', renderer: params.get('renderer') || '', rig: params.get('rig') || '', date: downloadedView ? params.get('date') || '' : '', sort: params.get('sort') || defaultSort, page: Math.max(1, Math.floor(Number(params.get('page'))) || 1)};
+  if (!(downloadedView ? ['downloaded', 'size', 'newest', 'oldest', 'title'] : ['newest', 'oldest', 'title']).includes(state.sort)) state.sort = defaultSort;
+  if (state.date && !batchDates.includes(state.date)) state.date = '';
   if (state.rig && !Object.hasOwn(rigLabels, state.rig)) state.rig = '';
   let filtered = [], activeItem = null, gallery = [], imageIndex = 0, toastTimer;
   const tagCounts = new Map();
@@ -32,7 +46,16 @@
   if (state.renderer && !renderers.includes(state.renderer)) state.renderer = '';
   $('renderer-filter').insertAdjacentHTML('beforeend', renderers.map(value => `<option value="${escape(value)}">${escape(value)}</option>`).join(''));
   $('total-count').textContent = items.length;
-  $('collection-date').textContent = `${new Date(catalog.collected_at).toLocaleDateString('zh-CN', {timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'}).replaceAll('/', '.')} 整理`;
+  $('nav-all-count').textContent = allItems.length;
+  $('nav-downloaded-count').textContent = savedItems.length;
+  const updatedAt = downloadedView ? downloads.updated_at : catalog.collected_at;
+  $('collection-date').textContent = updatedAt ? `${new Date(updatedAt).toLocaleDateString('zh-CN', {timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'}).replaceAll('/', '.')} ${downloadedView ? '最近下载' : '整理'}` : '等待首次下载';
+  if (downloadedView) {
+    $('date-filter').insertAdjacentHTML('beforeend', batchDates.map(date => `<option value="${escape(date)}">${escape(formatDate(date))} · ${savedItems.filter(item => item.download.batch_date === date).length} 项</option>`).join(''));
+    $('date-filter').value = state.date;
+    $('download-batch-count').textContent = batchDates.length;
+    $('download-total-size').textContent = formatBytes(savedItems.reduce((sum, item) => sum + item.download.bytes, 0));
+  }
   $('search').value = state.q;
   $('renderer-filter').value = state.renderer;
   $('rig-filter').value = state.rig;
@@ -40,8 +63,8 @@
 
   function updateURL() {
     const query = new URLSearchParams();
-    for (const key of ['q', 'tag', 'renderer', 'rig']) if (state[key]) query.set(key, state[key]);
-    if (state.sort !== 'newest') query.set('sort', state.sort);
+    for (const key of ['q', 'tag', 'renderer', 'rig', 'date']) if (state[key]) query.set(key, state[key]);
+    if (state.sort !== defaultSort) query.set('sort', state.sort);
     if (state.page > 1) query.set('page', state.page);
     const suffix = query.toString();
     try { history.replaceState(null, '', location.pathname + (suffix ? '?' + suffix : '') + location.hash); } catch {}
@@ -54,14 +77,30 @@
 
   function render() {
     const keywords = state.q.trim().toLowerCase().split(/\s+/).filter(Boolean);
-    filtered = items.filter(item => keywords.every(word => item.searchText.includes(word)) && (!state.tag || item.tags.some(tag => tag.name === state.tag)) && (!state.renderer || item.renderer_group === state.renderer) && (!state.rig || item.rigging_status === state.rig));
-    filtered.sort(state.sort === 'title' ? (a, b) => a.display_title.localeCompare(b.display_title, 'zh-CN') : state.sort === 'oldest' ? (a, b) => a.published_at.localeCompare(b.published_at) : (a, b) => b.published_at.localeCompare(a.published_at));
+    filtered = items.filter(item => keywords.every(word => item.searchText.includes(word)) && (!state.tag || item.tags.some(tag => tag.name === state.tag)) && (!state.renderer || item.renderer_group === state.renderer) && (!state.rig || item.rigging_status === state.rig) && (!state.date || item.download?.batch_date === state.date));
+    const sorts = {
+      downloaded: (a, b) => b.download.batch_date.localeCompare(a.download.batch_date) || b.download.downloaded_at.localeCompare(a.download.downloaded_at),
+      size: (a, b) => b.download.bytes - a.download.bytes,
+      title: (a, b) => a.display_title.localeCompare(b.display_title, 'zh-CN'),
+      oldest: (a, b) => a.published_at.localeCompare(b.published_at),
+      newest: (a, b) => b.published_at.localeCompare(a.published_at),
+    };
+    filtered.sort(sorts[state.sort]);
     const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
     state.page = Math.min(totalPages, state.page);
     const start = (state.page - 1) * pageSize;
     const visible = filtered.slice(start, start + pageSize);
     $('result-count').innerHTML = filtered.length ? `<strong>${filtered.length}</strong> 个模型 <span>· 当前 ${start + 1}–${start + visible.length} 项</span>` : '0 个匹配模型';
-    $('model-grid').innerHTML = visible.map(item => `<article class="model-card"><button type="button" class="card-open" data-open="${item.id}" aria-label="查看 ${escape(shortTitle(item))} 的详情"><figure class="card-image">${item.preview_file ? `<img src="${escape(item.preview_file)}" alt="${escape(shortTitle(item))}" loading="lazy" decoding="async" width="660" height="440">` : '<div class="no-preview">暂无预览</div>'}<span class="card-id">NO. ${item.id}</span>${item.rigging_status === 'controller' || item.rigging_status === 'rigged' ? `<span class="card-badge">${rigLabels[item.rigging_status]}</span>` : ''}</figure><h2 class="card-title">${escape(shortTitle(item))}</h2></button><div class="card-meta"><span>${escape(item.renderer || '渲染器未标注')}</span><a href="${escape(safeURL(item.url))}" target="_blank" rel="noopener noreferrer" aria-label="在原站查看 ${escape(shortTitle(item))}">原站 ↗</a></div></article>`).join('');
+    let previousDate = '';
+    $('model-grid').innerHTML = visible.map(item => {
+      let heading = '';
+      if (downloadedView && state.sort === 'downloaded' && item.download.batch_date !== previousDate) {
+        previousDate = item.download.batch_date;
+        const batch = filtered.filter(model => model.download.batch_date === previousDate);
+        heading = `<div class="download-batch"><h2>${escape(formatDate(previousDate))}<span>额度批次</span></h2><p>${batch.length} 项 · ${formatBytes(batch.reduce((sum, model) => sum + model.download.bytes, 0))}</p></div>`;
+      }
+      return heading + `<article class="model-card"><button type="button" class="card-open" data-open="${item.id}" aria-label="查看 ${escape(shortTitle(item))} 的详情"><figure class="card-image">${item.preview_file ? `<img src="${escape(item.preview_file)}" alt="${escape(shortTitle(item))}" loading="lazy" decoding="async" width="660" height="440">` : '<div class="no-preview">暂无预览</div>'}<span class="card-id">NO. ${item.id}</span>${item.download ? '<span class="download-badge">✓ 已下载</span>' : ''}${item.rigging_status === 'controller' || item.rigging_status === 'rigged' ? `<span class="card-badge">${rigLabels[item.rigging_status]}</span>` : ''}</figure><h2 class="card-title">${escape(shortTitle(item))}</h2></button><div class="card-meta"><span>${escape(item.renderer || '渲染器未标注')}</span><a href="${escape(safeURL(item.url))}" target="_blank" rel="noopener noreferrer" aria-label="在原站查看 ${escape(shortTitle(item))}">原站 ↗</a></div>${downloadedView ? `<div class="download-meta"><span>${escape(formatDate(item.download.batch_date))}</span><span>${formatBytes(item.download.bytes)}</span></div>` : ''}</article>`;
+    }).join('');
     $('empty-state').hidden = filtered.length > 0;
     $('previous-page').disabled = state.page <= 1;
     $('next-page').disabled = state.page >= totalPages;
@@ -78,8 +117,9 @@
   }
 
   function clearFilters() {
-    Object.assign(state, {q: '', tag: '', renderer: '', rig: '', page: 1});
+    Object.assign(state, {q: '', tag: '', renderer: '', rig: '', date: '', page: 1});
     $('search').value = ''; $('renderer-filter').value = ''; $('rig-filter').value = '';
+    if ($('date-filter')) $('date-filter').value = '';
     render();
   }
   function changePage(page) {
@@ -115,6 +155,14 @@
     $('detail-title').textContent = item.display_title;
     $('detail-tags').innerHTML = item.tags.map(tag => `<span>${escape(tag.name)}</span>`).join('');
     const fields = {...item.metadata, '发布时间': item.published_at.slice(0, 10)};
+    $('detail-download').hidden = !item.download;
+    $('detail-download').innerHTML = item.download ? `<span>✓ 已保存至 NAS</span>${downloadedView ? '' : `<a href="downloaded/#model-${item.id}">在已下载中查看 ↗</a>`}` : '';
+    if (item.download) Object.assign(fields, {
+      '额度日期': formatDate(item.download.batch_date),
+      '下载完成': new Date(item.download.downloaded_at).toLocaleString('zh-CN', {timeZone: 'Asia/Shanghai', hour12: false}),
+      '文件大小': formatBytes(item.download.bytes),
+      '文件数量': `${item.download.files} 个`,
+    });
     if (!fields['模型格式']) fields['模型格式'] = '原站未单独标注（归于 Blender 分类）';
     if (!fields['骨骼绑定']) fields['骨骼绑定'] = '未标注';
     $('detail-fields').innerHTML = Object.entries(fields).map(([key, value]) => `<div><dt>${escape(key)}</dt><dd>${escape(value || '未标注')}</dd></div>`).join('');
@@ -133,6 +181,7 @@
   $('search').addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(() => { state.q = $('search').value.slice(0, 180); state.page = 1; render(); }, 140); });
   $('tag-filters').addEventListener('click', event => { const button = event.target.closest('[data-tag]'); if (button) { state.tag = button.dataset.tag; state.page = 1; render(); } });
   for (const [id, key] of [['renderer-filter', 'renderer'], ['rig-filter', 'rig'], ['sort', 'sort']]) $(id).addEventListener('change', () => { state[key] = $(id).value; state.page = 1; render(); });
+  $('date-filter')?.addEventListener('change', () => { state.date = $('date-filter').value; state.page = 1; render(); });
   $('clear-filters').addEventListener('click', clearFilters); $('empty-reset').addEventListener('click', clearFilters);
   $('previous-page').addEventListener('click', () => changePage(state.page - 1));
   $('next-page').addEventListener('click', () => changePage(state.page + 1));
@@ -143,7 +192,7 @@
   $('detail-dialog').addEventListener('close', () => { try { history.replaceState(null, '', location.pathname + location.search); } catch {} });
   $('previous-image').addEventListener('click', () => moveImage(-1)); $('next-image').addEventListener('click', () => moveImage(1));
   $('detail-image').addEventListener('error', () => { $('image-error').hidden = false; if (activeItem?.preview_file && !$('detail-image').src.endsWith(activeItem.preview_file)) $('detail-image').src = activeItem.preview_file; });
-  $('export-button').addEventListener('click', () => downloadJSON({...catalog, items: items.map(cleanItem)}, 'wankucg_blender_animals_metadata.json'));
+  $('export-button').addEventListener('click', () => downloadJSON({...catalog, ...(downloadedView ? {download_batches: downloads.batches} : {}), items: items.map(cleanItem)}, downloadedView ? 'wankucg_downloaded_animals.json' : 'wankucg_blender_animals_metadata.json'));
   $('export-item').addEventListener('click', () => { if (activeItem) downloadJSON(cleanItem(activeItem), `wankucg_${activeItem.id}_metadata.json`); });
   $('share-button').addEventListener('click', async () => { try { await navigator.clipboard.writeText(location.href); showToast('链接已复制，可以直接分享'); } catch { showToast('请复制浏览器地址栏中的链接'); } });
   document.addEventListener('keydown', event => {
