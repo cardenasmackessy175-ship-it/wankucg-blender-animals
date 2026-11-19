@@ -14,7 +14,9 @@
   }
   const downloadById = new Map((downloads?.items || []).map(record => [record.id, record]));
   const allItems = catalog.items.map(item => ({...item, ...(downloadById.has(item.id) ? {download: downloadById.get(item.id)} : {})}));
-  const savedItems = allItems.filter(item => item.download);
+  const additional = (downloads?.extra_items || []).filter(item => downloadById.has(item.id))
+    .map(item => ({...item, download: downloadById.get(item.id)}));
+  const savedItems = [...allItems.filter(item => item.download), ...additional];
   const items = downloadedView ? savedItems : allItems;
   const byId = new Map(items.map(item => [item.id, item]));
   const pageSize = 32;
